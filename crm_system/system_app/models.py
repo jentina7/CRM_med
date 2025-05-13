@@ -1,20 +1,7 @@
-from django.core.validators import RegexValidator
-from django.contrib.auth.models import AbstractUser
 from django.db import models
 from phonenumber_field.modelfields import PhoneNumberField
 from django.core.validators import MaxValueValidator, MinValueValidator
-
-ROLE_CHOICES = (
-    ('doctor', 'doctor'),
-    ('reception', 'reception'),
-    ('superuser', 'superuser')
-)
-
-class UserProfile(AbstractUser):
-    role = models.CharField(max_length=64, choices=ROLE_CHOICES)
-
-    def __str__(self):
-        return f'{self.first_name} {self.last_name}'
+from django.contrib.auth.models import AbstractUser
 
 
 class Specialty(models.Model):
@@ -24,139 +11,79 @@ class Specialty(models.Model):
         return f'{self.specialty_name}'
 
 
-class Doctor(UserProfile):
+class UserProfile(AbstractUser):
+    ROLE_CHOICES = (
+        ('doctor', 'doctor'),
+        ('reception', 'reception'),
+        ('admin', 'admin')
+    )
+    fio = models.CharField(max_length=256)
+    role = models.CharField(max_length=64, choices=ROLE_CHOICES)
     phone_number = PhoneNumberField(null=True, blank=True, region='KG', unique=True)
-    profile_picture = models.ImageField(upload_to='profiles/')
+    profile_picture = models.ImageField(upload_to='profiles/', null=True, blank=True)
     age = models.PositiveSmallIntegerField(validators=[
         MinValueValidator(18),
         MaxValueValidator(110)
     ], null=True, blank=True)
-    experience = models.PositiveSmallIntegerField(validators=[MaxValueValidator(50)])
+    experience = models.PositiveSmallIntegerField(validators=[MaxValueValidator(70)], null=True, blank=True)
     specialty = models.ManyToManyField(Specialty, related_name='specialty_doctor')
+    bonus_doctor = models.PositiveSmallIntegerField(null=True, blank=True)
+    created_date = models.DateField(auto_now_add=True)
 
     def __str__(self):
-        specialties = ', '.join([s.specialty_name for s in self.specialty.all()])
-        return f'{self.first_name} {self.last_name} -- {self.role} -- {specialties or "No Specialty"}'
-
-    class Meta:
-        verbose_name_plural = "Doctor"
+        return f'{self.fio} -- {self.role}'
 
 
-class Reception(UserProfile):
-    phone_number = PhoneNumberField(null=True, blank=True, region='KG', unique=True)
-
-    class Meta:
-        verbose_name_plural = "Reception"
+class Department(models.Model):
+    department_name = models.CharField(max_length=50, unique=True)
+    floor = models.PositiveIntegerField(default=1)
+    cabinet = models.PositiveSmallIntegerField(default=0)
+    doctor = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name="depart_doctor")
 
     def __str__(self):
-        return f'{self.first_name} {self.last_name}, -- {self.role}'
-
-
-class SuperUser(UserProfile):
-    pass
-
-    class Meta:
-        verbose_name_plural = "SuperUser"
+        return f"{self.department_name} - {self.cabinet}"
 
 
 class Service(models.Model):
-    service_name = models.CharField(max_length=128)
-    price = models.PositiveIntegerField(validators=[MaxValueValidator(1000000)])
-    is_has_service = models.BooleanField()
-    count = models.PositiveSmallIntegerField(validators=[MaxValueValidator(10000)])
-    discount = models.DecimalField(max_digits=5, decimal_places=2, default=0.0)
-
-    def get_discount_price(self):
-        discount_rate = self.discount / 100
-        discount_price = self.price * (1 - discount_rate)
-        return round(discount_price, 2)
+    service_name = models.CharField(max_length=100)
+    service_price = models.PositiveIntegerField(default=0)
+    department = models.ForeignKey(Department, on_delete=models.CASCADE, related_name="service_depart")
+    # discount
 
     def __str__(self):
-        return f'{self.service_name} {self.price}, -- {self.discount}'
+        return f"{self.service_name} - {self.service_price}"
+
+
+class RecordingTime(models.Model):
+    shift_start = models.TimeField()
+    shift_end = models.TimeField()
+
+    def __str__(self):
+        return f"{self.shift_start} - {self.shift_end}"
 
 
 class Patient(models.Model):
-    fio = models.CharField(max_length=100)
+    full_name = models.CharField(max_length=100)
+    birthday = models.DateField()
     GENDER_CHOICES =(
         ('man', 'man'),
         ('woman', 'woman')
     )
     gender = models.CharField(max_length=16, choices=GENDER_CHOICES, null=True, blank=True)
-    birthday = models.DateField(auto_now=True)
     phone_number = PhoneNumberField(region='KG', null=True, blank=True)
-    dop_phone_number = PhoneNumberField(region='KG', null=True, blank=True)
-    inn = models.CharField(
-        max_length=14,
-        unique=True,
-        validators=[
-            RegexValidator(
-                regex=r'^\d{14}$',
-                message="ИНН должен состоять ровно из 14 цифр."
-            )
-        ]
+    department = models.ForeignKey(Department, on_delete=models.CASCADE, related_name="patient_depart")
+    service = models.ForeignKey(Service, on_delete=models.CASCADE, related_name="patient_service")
+    doctor = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name="patient_doctor")
+    reception = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name="patient_reception")
+    recording_time = models.ManyToManyField(RecordingTime)
+    TYPE_CHOICES = (
+        ('online', 'онлайн запись'),
+        ('queue', 'живая очередь'),
+        ('cencel', 'отмена')
     )
-    password = models.CharField(max_length=100)
-    BLOOD_CHOICES = (
-        ('I+', 'I+'),
-        ('I-', 'I-'),
-        ('II+', 'II+'),
-        ('II-', 'II-'),
-        ('III+', 'III+'),
-        ('III-', 'III-'),
-        ('IV+', 'IV+'),
-        ('IV-', 'IV-'),
-    )
-    blood_type = models.CharField(max_length=8, choices=BLOOD_CHOICES)
+    type_record = models.CharField(max_length=32, choices=TYPE_CHOICES, default='queue')
+    medical_history = models.TextField(null=True, blank=True)
+    created_date = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.fio} - {self.inn}"
-
-
-class Department(models.Model):
-    department_name = models.CharField(max_length=64, unique=True)
-    floor = models.SmallIntegerField(default=1)
-    cabinet = models.PositiveSmallIntegerField(default=1)
-
-    def __str__(self):
-        return f"{self.department_name} - {self.floor} -{self.cabinet}"
-
-
-class Appointment(models.Model):
-    patient = models.ForeignKey(Patient, on_delete=models.CASCADE)
-    doctor = models.ForeignKey(Doctor, on_delete=models.CASCADE)
-    department = models.ForeignKey(Department, on_delete=models.CASCADE)
-    comment = models.TextField()
-    QUEUE_CHOICES = (
-        ("queue", "живая очередь"),
-        ("call", "звонок"),
-    )
-    queue_status = models.CharField(max_length=16, choices=QUEUE_CHOICES, default="queue")
-    vaccination = models.BooleanField(default=False)
-    date_time = models.DateTimeField(auto_now_add=True)
-    end_time = models.DateTimeField(auto_now=True)
-    STATUS_CHOICES = (
-        ("запланировано", "запланировано"),
-        ("завершено", "завершено"),
-        ("отменено", "отменено"),
-
-    )
-    status_appointment = models.CharField(max_length=16, choices=STATUS_CHOICES)
-    payment = models.BooleanField(default=False)
-
-    def __str__(self):
-        return f" {self.patient} - {self.status_appointment}"
-
-
-
-class HistoryAppointment(models.Model):
-    appointment = models.ForeignKey(Appointment, on_delete=models.CASCADE)
-    doctor = models.ForeignKey(Doctor, on_delete=models.CASCADE)
-    service = models.ForeignKey(Service, on_delete=models.CASCADE)
-    date_time = models.DateTimeField(auto_now=True)
-    end_time = models.DateTimeField(auto_now=True)
-    status = models.BooleanField(default=False)
-
-    def __str__(self):
-        return f"{self.doctor} - {self.status}"
-
-
+        return f"{self.full_name} - {self.recording_time} - {self.type_record}"
