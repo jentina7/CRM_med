@@ -13,4 +13,8 @@ urlpatterns = [
     path('register/', UserRegisterView.as_view(), name='register_reception'),
     path('login/', CustomLoginView.as_view(), name='login'),
     path('logout/', LogoutView.as_view(), name='logout'),
+
+    path('doctor/create/', DoctorCreateApiView.as_view(), name='doctor_create'),
+    path('doctor/', DoctorListAPIView.as_view(), name='doctor_list'),
+    path('doctor/<int:pk>/', DoctorDetailAPIView.as_view(), name='doctor_detail'),
 ]

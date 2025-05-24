@@ -1,7 +1,8 @@
 from rest_framework import serializers
-from system_app.models import Specialty, UserProfile
+from system_app.models import  UserProfile, Department
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
+from common.serializers import DepartmentForServiceSerializer, SpecialtySerializer
 
 
 class UserRegisterSerializer(serializers.ModelSerializer):
@@ -69,30 +70,78 @@ class LogoutSerializer(serializers.Serializer):
             raise serializers.ValidationError({'detail': 'Invalid or already revoked token'})
 
 
-class SpecialtySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Specialty
-        fields = ['specialty_name']
+# class SpecialtySerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = Specialty
+#         fields = ['specialty_name']
 
 
 class DoctorProfileSerializer(serializers.ModelSerializer):
+    department = DepartmentForServiceSerializer()
+    specialty = SpecialtySerializer(many=True, read_only=True)
+
     class Meta:
         model = UserProfile
         fields = ['fio', 'username', 'profile_picture', 'age', 'role', 'phone_number',
-                  'specialty', 'experience', 'bonus_doctor', 'created_date']
+                  'specialty', 'experience', 'department', 'bonus_doctor', 'created_date']
 
 
-class DoctorProfileForDepartSerializer(serializers.ModelSerializer):
+# class DoctorProfileForDepartSerializer(serializers.ModelSerializer):
+#     department = DepartmentForServiceSerializer()
+#     specialty = SpecialtySerializer(many=True, read_only=True)
+#
+#     class Meta:
+#         model = UserProfile
+#         fields = ['fio', 'profile_picture', 'age', 'phone_number',
+#                   'specialty', 'experience', 'department', 'created_date']
+
+
+class DoctorCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserProfile
-        fields = ['fio', 'profile_picture', 'age', 'phone_number',
-                  'specialty', 'experience', 'created_date']
+        fields = ['id', 'fio', 'profile_picture', 'role', 'experience', 'specialty', 'department', 'bonus_doctor',
+                  'phone_number', 'email']
+
+
+class DoctorListSerializer(serializers.ModelSerializer):
+    department = DepartmentForServiceSerializer()
+
+    class Meta:
+        model = UserProfile
+        fields = ['id', 'fio', 'department', 'phone_number']
+
+
+class DoctorDetailSerializer(serializers.ModelSerializer):
+    department = DepartmentForServiceSerializer(read_only=True)
+    department_id = serializers.PrimaryKeyRelatedField(
+        queryset=Department.objects.all(),
+        write_only=True,
+        source='department'
+    )
+    specialty = SpecialtySerializer(many=True, read_only=True)
+
+    class Meta:
+        model = UserProfile
+        fields = ['fio', 'profile_picture', 'role', 'experience', 'specialty', 'department', 'bonus_doctor',
+                  'phone_number', 'email', 'department_id']
+
+
+class DoctorNameOnlySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserProfile
+        fields = ['fio']
 
 
 class ReceptionProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserProfile
-        fields = ['fio', 'username', 'role', 'phone_number']
+        fields = ['fio', 'email', 'role', 'phone_number']
+
+
+class ReceptionNameSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserProfile
+        fields = ['fio']
 
 
 class AdminProfileSerializer(serializers.ModelSerializer):

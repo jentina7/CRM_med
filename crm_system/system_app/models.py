@@ -1,7 +1,8 @@
 from django.db import models
+from django.db.models import Count
 from phonenumber_field.modelfields import PhoneNumberField
 from django.core.validators import MaxValueValidator, MinValueValidator
-from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.models import AbstractUser, BaseUserManager
 
 
 class Specialty(models.Model):
@@ -11,7 +12,16 @@ class Specialty(models.Model):
         return f'{self.specialty_name}'
 
 
+class Department(models.Model):
+    department_name = models.CharField(max_length=50, unique=True)
+    floor = models.PositiveIntegerField(default=1)
+    cabinet = models.PositiveSmallIntegerField(default=0)
+    def __str__(self):
+        return f"{self.department_name} - {self.cabinet}"
+
+
 class UserProfile(AbstractUser):
+    username = models.CharField(null=True, blank=True)
     ROLE_CHOICES = (
         ('doctor', 'doctor'),
         ('reception', 'reception'),
@@ -26,22 +36,17 @@ class UserProfile(AbstractUser):
         MaxValueValidator(110)
     ], null=True, blank=True)
     experience = models.PositiveSmallIntegerField(validators=[MaxValueValidator(70)], null=True, blank=True)
-    specialty = models.ManyToManyField(Specialty, related_name='specialty_doctor')
+    specialty = models.ManyToManyField(Specialty, related_name='specialty_doctor', null=True, blank=True)
+    department = models.ForeignKey(Department, on_delete=models.CASCADE, related_name='depart_doctor', null=True, blank=True)
     bonus_doctor = models.PositiveSmallIntegerField(null=True, blank=True)
     created_date = models.DateField(auto_now_add=True)
+    email = models.EmailField(max_length=254, unique=True)
+
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = ['username']
 
     def __str__(self):
         return f'{self.fio} -- {self.role}'
-
-
-class Department(models.Model):
-    department_name = models.CharField(max_length=50, unique=True)
-    floor = models.PositiveIntegerField(default=1)
-    cabinet = models.PositiveSmallIntegerField(default=0)
-    doctor = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name="depart_doctor")
-
-    def __str__(self):
-        return f"{self.department_name} - {self.cabinet}"
 
 
 class Service(models.Model):
@@ -87,3 +92,63 @@ class Patient(models.Model):
 
     def __str__(self):
         return f"{self.full_name} - {self.recording_time} - {self.type_record}"
+
+
+class HistoryRecording(models.Model):
+    patient = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name='patient_history')
+    STATUS_CHOICES = (
+        ("был в приеме", "был в приеме"),
+        ("в ожидании", "в ожидании"),
+        ("отменен", "отменен")
+    )
+    status = models.CharField(max_length=24, choices=STATUS_CHOICES)
+
+    @classmethod
+    def get_count_total_status(cls):
+        data = cls.objects.values('status').annotate(count=Count('status'))
+        status_count = {item["status"]: item['count'] for item in data}
+        total_sum = sum(status_count.values())
+        status_count['total_sum'] = total_sum
+        return status_count
+
+    @classmethod
+    def reception_status(cls):
+        total = cls.objects.filter(status="был в приеме").count()
+        return {
+            "status": "был в приеме",
+            "total_sum": total
+        }
+
+    @classmethod
+    def get_count_statuses(cls):
+        data = cls.objects.values('status').annotate(count=Count('status'))
+        status_count = {item["status"]: item['count'] for item in data}
+        return status_count
+
+    def __str__(self):
+        return f'{self.patient}, {self.status}'
+
+
+
+class UserManager(BaseUserManager):
+    def create_user(self, email, password=None, **extra_fields):
+        extra_fields = {"is_staff": False, "is_superuser": False, **extra_fields}
+        if not email:
+            raise ValueError("Users must have an email address")
+
+        user = UserProfile(email=email, **extra_fields)
+
+        if password:
+            user.set_password(password)
+        else:
+            user.set_unusable_password()
+
+        return user
+
+    def create_superuser(self, email, password=None, **extra_fields):
+
+        extra_fields = {**extra_fields, "is_staff": True, "is_superuser": True}
+
+        user = self.create_user(email=email, password=password, **extra_fields)
+
+        return user

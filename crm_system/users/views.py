@@ -1,6 +1,7 @@
 from django.shortcuts import render
 from rest_framework import viewsets, generics, status
 from .serializers import *
+from common.serializers import SpecialtySerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework.response import Response
 from system_app.models import UserProfile, Specialty
@@ -64,5 +65,24 @@ class AdminProfileViewSet(viewsets.ModelViewSet):
     serializer_class = AdminProfileSerializer
 
 
+class DoctorCreateApiView(generics.CreateAPIView):
+    serializer_class = DoctorCreateSerializer
+
+
+class DoctorListAPIView(generics.ListAPIView):
+    queryset = UserProfile.objects.all()
+    serializer_class = DoctorListSerializer
+
+
+class DoctorDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = UserProfile.objects.all()
+    serializer_class = DoctorDetailSerializer
+
+    def patch(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
